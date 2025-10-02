@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Cantina Vini</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#7b1c1c">
+  <style>
+    body { background-color: #1a1a1a; color: white; }
+    .badge { background: white; color: #7b1c1c; padding: 0.25rem 0.5rem; border-radius: 999px; font-weight: bold; }
+    dialog::backdrop { background: rgba(0,0,0,0.6); }
+    dialog { border: none; border-radius: 10px; padding: 20px; max-width: 600px; width: 90%; }
+    dialog input, dialog textarea, dialog select {
+      width: 100%; margin: 5px 0; padding: 6px; border: 1px solid #ccc; border-radius: 6px;
+    }
+    .rating span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 3px; }
+    .rating .full { background: #7b1c1c; }
+    .rating .empty { background: #aaa; }
+  </style>
+</head>
+<body class="p-6">
+
+  <h1 class="text-3xl font-bold mb-4 flex items-center gap-2">🍷 Cantina personale</h1>
+
+  <!-- Header -->
+  <div class="flex gap-2 mb-4">
+    <button onclick="exportXLSX()" class="bg-red-700 text-white px-4 py-2 rounded">Esporta</button>
+    <input type="file" id="fileInput" class="hidden" accept=".xlsx,.xls,.csv" onchange="importXLSX(event)">
+    <button onclick="document.getElementById('fileInput').click()" class="bg-red-700 text-white px-4 py-2 rounded">Importa</button>
+    <button onclick="openAddDialog()" class="bg-green-600 text-white px-4 py-2 rounded">Aggiungi bottiglia</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="grid grid-cols-3 gap-4 mb-4">
+    <div class="bg-gray-800 p-4 rounded text-center">
+      <div class="text-sm">Bottiglie</div>
+      <div id="statBottiglie" class="text-2xl font-bold text-red-700">0</div>
+    </div>
+    <div class="bg-gray-800 p-4 rounded text-center">
+      <div class="text-sm">Etichette in cantina</div>
+      <div id="statEtichette" class="text-2xl font-bold">0</div>
+    </div>
+    <div class="bg-gray-800 p-4 rounded text-center">
+      <div class="text-sm">Valore stimato (€)</div>
+      <div id="statValore" class="text-2xl font-bold">0</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex flex-wrap gap-2 mb-4">
+    <input id="searchBox" oninput="render()" placeholder="Cerca..." class="px-2 py-1 rounded bg-gray-100 text-black">
+    <select id="filterDenom" onchange="render()" class="px-2 py-1 rounded bg-gray-100 text-black">
+      <option value="__ALL__">Tutte le denominazioni</option>
+    </select>
+    <select id="filterRating" onchange="render()" class="px-2 py-1 rounded bg-gray-100 text-black">
+      <option value="__NONE__">Nessun filtro</option>
+      <option value="1">1+</option>
+      <option value="2">2+</option>
+      <option value="3">3+</option>
+      <option value="4">4+</option>
+      <option value="5">5</option>
+    </select>
+    <label class="flex items-center gap-1">
+      <input type="checkbox" id="filterStock" checked onchange="render()"> Solo in cantina
+    </label>
+  </div>
+
+  <!-- List -->
+  <div id="wineList" class="space-y-2"></div>
+
+  <!-- Detail Dialog -->
+  <dialog id="detailDialog">
+    <h2 class="text-xl font-bold mb-2">Dettagli bottiglia</h2>
+    <form method="dialog" id="detailForm" class="space-y-2 text-black">
+      <input type="hidden" id="detailIndex">
+      <label>Quantità<input id="detailQuantita" type="number"></label>
+      <label>Cantina<input id="detailCantina"></label>
+      <label>Vino<input id="detailVino"></label>
+      <label>Denominazione<input id="detailDenom"></label>
+      <label>Annata<input id="detailAnnata"></label>
+      <label>Prezzo (€)<input id="detailCosto" type="number" step="0.01"></label>
+
+      <label>Uve<textarea id="detailUve" rows="3"></textarea></label>
+      <label>Consumo ideale<input id="detailConsumo"></label>
+      <label>Luogo di acquisto<input id="detailLuogo"></label>
+      <label>Temperatura di servizio<input id="detailTemperatura"></label>
+      <label>Abbinamenti<textarea id="detailAbbinamenti" rows="3"></textarea></label>
+      <label>Anno di acquisto<input id="detailAcquisto"></label>
+      <label>Approvazione (1-5)<input id="detailApprovazione" type="number" min="1" max="5"></label>
+      <label>Note<textarea id="detailNote" rows="3"></textarea></label>
+
+      <div class="flex justify-between pt-2">
+        <button type="button" onclick="deleteWine()" class="bg-red-600 text-white px-3 py-1 rounded">Elimina</button>
+        <div class="flex gap-2">
+          <button type="button" onclick="duplicateWine()" class="bg-gray-300 px-3 py-1 rounded">Duplica</button>
+          <button type="submit" class="bg-green-600 text-white px-3 py-1 rounded">Chiudi e salva</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    let wines = JSON.parse(localStorage.getItem("wines")) || [];
+
+    function save() { localStorage.setItem("wines", JSON.stringify(wines)); }
+    function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+    function render() {
+      const search = document.getElementById("searchBox").value.toLowerCase();
+      const denom = document.getElementById("filterDenom").value;
+      const rating = document.getElementById("filterRating").value;
+      const onlyStock = document.getElementById("filterStock").checked;
+
+      const list = document.getElementById("wineList");
+      list.innerHTML = "";
+
+      let filtered = wines.filter(w => {
+        if (onlyStock && w.quantita <= 0) return false;
+        if (denom !== "__ALL__" && w.denominazione !== denom) return false;
+        if (rating !== "__NONE__" && (w.approvazione || 0) < Number(rating)) return false;
+        if (search && !(w.cantina+w.vino+w.denominazione+w.note).toLowerCase().includes(search)) return false;
+        return true;
+      });
+
+      // stats (solo bottiglie in cantina)
+      const inStock = wines.filter(w => (w.quantita||0) > 0);
+      document.getElementById("statBottiglie").innerText =
+        inStock.reduce((a,b)=>a+(b.quantita||0),0);
+      document.getElementById("statEtichette").innerText =
+        new Set(inStock.map(w=>w.cantina+" "+w.vino)).size;
+      document.getElementById("statValore").innerText =
+        inStock.reduce((a,b)=>a+((b.costo||0)*(b.quantita||0)),0).toFixed(2);
+
+      // fill denom filter
+      const select = document.getElementById("filterDenom");
+      const values = ["__ALL__",...new Set(wines.map(w=>w.denominazione).filter(Boolean))];
+      select.innerHTML = values.map(v=>`<option value="${v}">${v==="__ALL__"?"Tutte le denominazioni":v}</option>`).join("");
+      select.value = denom;
+
+      for (let i=0;i<filtered.length;i++) {
+        const w = filtered[i];
+        const index = wines.indexOf(w);
+        const div = document.createElement("div");
+        div.className = "grid grid-cols-[56px_1fr_1fr_auto_auto] gap-3 items-center p-3 border rounded-2xl cursor-pointer hover:bg-gray-800";
+        div.onclick = ()=>openDetail(index);
+        div.innerHTML = `
+          <div class="flex justify-center"><span class="badge">${w.quantita}</span></div>
+          <div><div class="font-bold">${w.cantina||"—"}</div><div class="text-xs opacity-70">${w.denominazione||w.tipologia||""}</div></div>
+          <div><div>${w.vino||"—"}</div><div class="text-xs opacity-70">${w.annata||""}</div></div>
+          <div>${w.costo? w.costo.toFixed(2)+" €":"—"}</div>
+          <div class="rating">${[1,2,3,4,5].map(n=>`<span class="${n<= (w.approvazione||0)?"full":"empty"}"></span>`).join("")}</div>
+        `;
+        list.appendChild(div);
+      }
+    }
+
+    function openAddDialog() {
+      const idx = wines.length;
+      wines.push({id:uid(),quantita:1,cantina:"",vino:""});
+      save(); render(); openDetail(idx);
+    }
+
+    function openDetail(i) {
+      const w = wines[i];
+      document.getElementById("detailIndex").value = i;
+      document.getElementById("detailQuantita").value = w.quantita || "";
+      document.getElementById("detailCantina").value = w.cantina || "";
+      document.getElementById("detailVino").value = w.vino || "";
+      document.getElementById("detailDenom").value = w.denominazione || "";
+      document.getElementById("detailAnnata").value = w.annata || "";
+      document.getElementById("detailCosto").value = w.costo || "";
+      document.getElementById("detailUve").value = w.uve || "";
+      document.getElementById("detailConsumo").value = w.consumo || "";
+      document.getElementById("detailLuogo").value = w.luogo || "";
+      document.getElementById("detailTemperatura").value = w.temperatura || "";
+      document.getElementById("detailAbbinamenti").value = w.abbinamenti || "";
+      document.getElementById("detailAcquisto").value = w.acquisto || "";
+      document.getElementById("detailApprovazione").value = w.approvazione || "";
+      document.getElementById("detailNote").value = w.note || "";
+      document.getElementById("detailDialog").showModal();
+    }
+
+    document.getElementById("detailForm").onsubmit = function(e) {
+      e.preventDefault();
+      const i = document.getElementById("detailIndex").value;
+      let w = wines[i];
+      w.quantita = Number(document.getElementById("detailQuantita").value)||0;
+      w.cantina = document.getElementById("detailCantina").value;
+      w.vino = document.getElementById("detailVino").value;
+      w.denominazione = document.getElementById("detailDenom").value;
+      w.annata = document.getElementById("detailAnnata").value;
+      w.costo = Number(document.getElementById("detailCosto").value)||0;
+      w.uve = document.getElementById("detailUve").value;
+      w.consumo = document.getElementById("detailConsumo").value;
+      w.luogo = document.getElementById("detailLuogo").value;
+      w.temperatura = document.getElementById("detailTemperatura").value;
+      w.abbinamenti = document.getElementById("detailAbbinamenti").value;
+      w.acquisto = document.getElementById("detailAcquisto").value;
+      w.approvazione = Number(document.getElementById("detailApprovazione").value)||0;
+      w.note = document.getElementById("detailNote").value;
+      save(); render(); document.getElementById("detailDialog").close();
+    }
+
+    function deleteWine() {
+      const i = document.getElementById("detailIndex").value;
+      if (confirm("Vuoi eliminare questa bottiglia?")) {
+        wines.splice(i,1); save(); render(); document.getElementById("detailDialog").close();
+      }
+    }
+    function duplicateWine() {
+      const i = document.getElementById("detailIndex").value;
+      const copy = {...wines[i],id:uid()};
+      wines.push(copy); save(); render();
+      alert("Bottiglia duplicata");
+    }
+
+    function exportXLSX() {
+      const rows = wines.map(w => ({
+        quantita: w.quantita,
+        cantina: w.cantina,
+        vino: w.vino,
+        denominazione: w.denominazione,
+        annata: w.annata,
+        costo: w.costo,
+        uve: w.uve,
+        consumo: w.consumo,
+        luogo: w.luogo,
+        temperatura: w.temperatura,
+        abbinamenti: w.abbinamenti,
+        acquisto: w.acquisto,
+        approvazione: w.approvazione,
+        note: w.note,
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Cantina");
+      XLSX.writeFile(wb, "cantina_export.xlsx");
+    }
+
+    function importXLSX(e) {
+      const file = e.target.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        const data = new Uint8Array(ev.target.result);
+        const wb = XLSX.read(data, {type:"array"});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws);
+
+        wines = rows.map(r => ({
+          id: uid(),
+          quantita: Number(r.quantita) || 0,
+          cantina: r.cantina || "",
+          vino: r.vino || "",
+          denominazione: r.denominazione || "",
+          annata: r.annata || "",
+          costo: Number(r.costo) || 0,
+          uve: r.uve || "",
+          consumo: r.consumo || "",
+          luogo: r.luogo || "",
+          temperatura: r.temperatura || "",
+          abbinamenti: r.abbinamenti || "",
+          acquisto: r.acquisto || "",
+          approvazione: Number(r.approvazione) || 0,
+          note: r.note || "",
+        }));
+
+        save(); render();
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    render();
+  </script>
+
+  <!-- ✅ Service Worker registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('service-worker.js')
+        .then(() => console.log("✅ Service worker registrato"))
+        .catch(err => console.error("❌ SW error:", err));
+    }
+  </script>
+</body>
+</html>
