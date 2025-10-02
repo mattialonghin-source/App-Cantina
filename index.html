@@ -34,19 +34,19 @@
     <button onclick="openAddDialog()" class="bg-green-600 text-white px-4 py-2 rounded">Aggiungi bottiglia</button>
   </div>
 
-  <!-- Stats -->
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-    <div class="bg-gray-800 p-4 rounded text-center">
-      <div class="text-sm">Bottiglie</div>
-      <div id="statBottiglie" class="text-2xl font-bold text-red-700">0</div>
+  <!-- Stats compatte con 3 card -->
+  <div class="grid grid-cols-3 gap-2 mb-4">
+    <div class="bg-gray-800 p-2 rounded text-center">
+      <div class="text-xs">Bottiglie</div>
+      <div id="statBottiglie" class="text-lg font-bold text-red-700">0</div>
     </div>
-    <div class="bg-gray-800 p-4 rounded text-center">
-      <div class="text-sm">Etichette in cantina</div>
-      <div id="statEtichette" class="text-2xl font-bold">0</div>
+    <div class="bg-gray-800 p-2 rounded text-center">
+      <div class="text-xs">Etichette</div>
+      <div id="statEtichette" class="text-lg font-bold">0</div>
     </div>
-    <div class="bg-gray-800 p-4 rounded text-center">
-      <div class="text-sm">Valore stimato (€)</div>
-      <div id="statValore" class="text-2xl font-bold">0</div>
+    <div class="bg-gray-800 p-2 rounded text-center">
+      <div class="text-xs">Valore</div>
+      <div id="statValore" class="text-lg font-bold">0€</div>
     </div>
   </div>
 
@@ -146,7 +146,7 @@
       document.getElementById("statEtichette").innerText =
         new Set(inStock.map(w=>w.cantina+" "+w.vino)).size;
       document.getElementById("statValore").innerText =
-        inStock.reduce((a,b)=>a+((b.costo||0)*(b.quantita||0)),0).toFixed(2);
+        inStock.reduce((a,b)=>a+((b.costo||0)*(b.quantita||0)),0).toFixed(0) + "€";
 
       // fill denom filter
       const select = document.getElementById("filterDenom");
@@ -163,21 +163,14 @@
         div.onclick = ()=>openDetail(index);
 
         div.innerHTML = `
-          <!-- Quantità -->
           <div class="flex justify-center"><span class="badge">${w.quantita}</span></div>
-
-          <!-- Info principali (4 righe) -->
           <div class="flex flex-col whitespace-nowrap overflow-hidden w-full">
             <div class="font-bold truncate">${w.cantina||"—"}</div>
             <div class="truncate">${w.vino||"—"}</div>
             <div class="text-xs opacity-70 truncate">${w.denominazione||""}</div>
             <div class="text-xs opacity-70 truncate">${w.annata||""}</div>
           </div>
-
-          <!-- Prezzo -->
           <div class="text-right font-semibold">${w.costo ? Math.round(w.costo) + "€" : "—"}</div>
-
-          <!-- Rating verticale -->
           <div class="flex flex-col items-end gap-1 rating">
             ${[1,2,3,4,5].map(n=>`<span class="${n<=(w.approvazione||0)?"full":"empty"}"></span>`).join("")}
           </div>
