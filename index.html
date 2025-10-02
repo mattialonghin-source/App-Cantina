@@ -30,6 +30,7 @@
     <button onclick="exportXLSX()" class="bg-red-700 text-white px-4 py-2 rounded">Esporta</button>
     <input type="file" id="fileInput" class="hidden" accept=".xlsx,.xls,.csv" onchange="importXLSX(event)">
     <button onclick="document.getElementById('fileInput').click()" class="bg-red-700 text-white px-4 py-2 rounded">Importa</button>
+    <button onclick="clearDatabase()" class="bg-yellow-600 text-white px-4 py-2 rounded">Svuota database</button>
     <button onclick="openAddDialog()" class="bg-green-600 text-white px-4 py-2 rounded">Aggiungi bottiglia</button>
   </div>
 
@@ -52,10 +53,10 @@
   <!-- Filters -->
   <div class="flex flex-wrap gap-2 mb-4">
     <input id="searchBox" oninput="render()" placeholder="Cerca..." class="px-2 py-1 rounded bg-gray-100 text-black flex-1">
-    <select id="filterDenom" onchange="render()" class="px-2 py-1 rounded bg-gray-100 text-black">
+    <select id="filterDenom" onchange="render()" class="px-2 py-1 rounded bg-gray-100 text-black w-48">
       <option value="__ALL__">Tutte le denominazioni</option>
     </select>
-    <select id="filterRating" onchange="render()" class="px-2 py-1 rounded bg-gray-100 text-black">
+    <select id="filterRating" onchange="render()" class="px-2 py-1 rounded bg-gray-100 text-black w-48">
       <option value="__NONE__">Nessun filtro</option>
       <option value="1">1+</option>
       <option value="2">2+</option>
@@ -76,26 +77,27 @@
     <h2 class="text-xl font-bold mb-2">Dettagli bottiglia</h2>
     <form method="dialog" id="detailForm" class="space-y-2 text-black">
       <input type="hidden" id="detailIndex">
-      <label>Quantità<input id="detailQuantita" type="number"></label>
-      <label>Cantina<input id="detailCantina"></label>
-      <label>Vino<input id="detailVino"></label>
-      <label>Denominazione<input id="detailDenom"></label>
-      <label>Annata<input id="detailAnnata"></label>
-      <label>Prezzo (€)<input id="detailCosto" type="number" step="0.01"></label>
+      <label>Quantità<input id="detailQuantita" type="number" disabled></label>
+      <label>Cantina<input id="detailCantina" disabled></label>
+      <label>Vino<input id="detailVino" disabled></label>
+      <label>Denominazione<input id="detailDenom" disabled></label>
+      <label>Annata<input id="detailAnnata" disabled></label>
+      <label>Prezzo (€)<input id="detailCosto" type="number" step="0.01" disabled></label>
 
-      <label>Uve<textarea id="detailUve" rows="3"></textarea></label>
-      <label>Consumo ideale<input id="detailConsumo"></label>
-      <label>Luogo di acquisto<input id="detailLuogo"></label>
-      <label>Temperatura di servizio<input id="detailTemperatura"></label>
-      <label>Abbinamenti<textarea id="detailAbbinamenti" rows="3"></textarea></label>
-      <label>Anno di acquisto<input id="detailAcquisto"></label>
-      <label>Approvazione (1-5)<input id="detailApprovazione" type="number" min="1" max="5"></label>
-      <label>Note<textarea id="detailNote" rows="3"></textarea></label>
+      <label>Uve<textarea id="detailUve" rows="3" disabled></textarea></label>
+      <label>Consumo ideale<input id="detailConsumo" disabled></label>
+      <label>Luogo di acquisto<input id="detailLuogo" disabled></label>
+      <label>Temperatura di servizio<input id="detailTemperatura" disabled></label>
+      <label>Abbinamenti<textarea id="detailAbbinamenti" rows="3" disabled></textarea></label>
+      <label>Anno di acquisto<input id="detailAcquisto" disabled></label>
+      <label>Approvazione (1-5)<input id="detailApprovazione" type="number" min="1" max="5" disabled></label>
+      <label>Note<textarea id="detailNote" rows="3" disabled></textarea></label>
 
       <div class="flex justify-between pt-2">
         <button type="button" onclick="deleteWine()" class="bg-red-600 text-white px-3 py-1 rounded">Elimina</button>
         <div class="flex gap-2">
           <button type="button" onclick="duplicateWine()" class="bg-gray-300 px-3 py-1 rounded">Duplica</button>
+          <button type="button" onclick="toggleEditMode(true)" class="bg-blue-600 text-white px-3 py-1 rounded">Edita</button>
           <button type="submit" class="bg-green-600 text-white px-3 py-1 rounded">Chiudi e salva</button>
         </div>
       </div>
@@ -107,6 +109,19 @@
 
     function save() { localStorage.setItem("wines", JSON.stringify(wines)); }
     function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+    function clearDatabase() {
+      if (confirm("Vuoi davvero svuotare il database?")) {
+        wines = [];
+        save();
+        render();
+      }
+    }
+
+    function toggleEditMode(enable) {
+      const formEls = document.querySelectorAll("#detailForm input, #detailForm textarea");
+      formEls.forEach(el => el.disabled = !enable);
+    }
 
     function render() {
       const search = document.getElementById("searchBox").value.toLowerCase();
@@ -125,7 +140,7 @@
         return true;
       });
 
-      // stats (solo bottiglie in cantina)
+      // stats
       const inStock = wines.filter(w => (w.quantita||0) > 0);
       document.getElementById("statBottiglie").innerText =
         inStock.reduce((a,b)=>a+(b.quantita||0),0);
@@ -148,8 +163,8 @@
         div.onclick = ()=>openDetail(index);
         div.innerHTML = `
           <div class="flex justify-center"><span class="badge">${w.quantita}</span></div>
-          <div><div class="font-bold">${w.cantina||"—"}</div><div class="text-xs opacity-70">${w.denominazione||w.tipologia||""}</div></div>
-          <div><div>${w.vino||"—"}</div><div class="text-xs opacity-70">${w.annata||""}</div></div>
+          <div class="whitespace-normal break-words"><div class="font-bold">${w.cantina||"—"}</div><div class="text-xs opacity-70">${w.denominazione||w.tipologia||""}</div></div>
+          <div class="whitespace-normal break-words"><div>${w.vino||"—"}</div><div class="text-xs opacity-70">${w.annata||""}</div></div>
           <div>${w.costo? w.costo.toFixed(2)+" €":"—"}</div>
           <div class="rating">${[1,2,3,4,5].map(n=>`<span class="${n<= (w.approvazione||0)?"full":"empty"}"></span>`).join("")}</div>
         `;
@@ -180,6 +195,7 @@
       document.getElementById("detailAcquisto").value = w.acquisto || "";
       document.getElementById("detailApprovazione").value = w.approvazione || "";
       document.getElementById("detailNote").value = w.note || "";
+      toggleEditMode(false);
       document.getElementById("detailDialog").showModal();
     }
 
@@ -249,23 +265,26 @@
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(ws);
 
-        wines = rows.map(r => ({
-          id: uid(),
-          quantita: Number(r.quantita) || 0,
-          cantina: r.cantina || "",
-          vino: r.vino || "",
-          denominazione: r.denominazione || "",
-          annata: r.annata || "",
-          costo: Number(r.costo) || 0,
-          uve: r.uve || "",
-          consumo: r.consumo || "",
-          luogo: r.luogo || "",
-          temperatura: r.temperatura || "",
-          abbinamenti: r.abbinamenti || "",
-          acquisto: r.acquisto || "",
-          approvazione: Number(r.approvazione) || 0,
-          note: r.note || "",
-        }));
+        // import incrementale
+        rows.forEach(r => {
+          wines.push({
+            id: uid(),
+            quantita: Number(r.quantita) || 0,
+            cantina: r.cantina || "",
+            vino: r.vino || "",
+            denominazione: r.denominazione || "",
+            annata: r.annata || "",
+            costo: Number(r.costo) || 0,
+            uve: r.uve || "",
+            consumo: r.consumo || "",
+            luogo: r.luogo || "",
+            temperatura: r.temperatura || "",
+            abbinamenti: r.abbinamenti || "",
+            acquisto: r.acquisto || "",
+            approvazione: Number(r.approvazione) || 0,
+            note: r.note || "",
+          });
+        });
 
         save(); render();
       };
